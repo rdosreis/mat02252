@@ -1,0 +1,22 @@
+---
+title: "Untitled"
+author: "Rodrigo Citton P. dos Reis"
+date: "14 de março de 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Prezad@ alun@!
+
+Seja bem-vind@ ao Moodle da disciplina de Processos Estocásticos.
+
+Neste semestre pretendemos abordar os seguintes tópicos: Processos Estocásticos, Cadeias de Markov a Parâmetro Discreto, Cadeias de Markov com Espaço de Estado Finito, Cadeias de Markov a Parâmetro Contínuo e Processos Estocásticos a Parâmetro Contínuo.
+
+Aqui você vai encontrar o material da disciplina: notas de aula, listas de exercícios, soluções comentadas e respostas __(para alguns exercícios)__, referências bibliográficas, vídeos, scripts em `R`, etc.
+
+Bons estudos!
+

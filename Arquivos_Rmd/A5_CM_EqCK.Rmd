@@ -1,0 +1,429 @@
+---
+title: "Cadeias de Markov"
+subtitle: "Probabilidades de transição em n-passos"
+author: "Rodrigo Citton P. dos Reis"
+date: "Porto Alegre, 2019"
+output:
+  tufte::tufte_handout:
+    citation_package: natbib
+    latex_engine: xelatex
+  tufte::tufte_html: default
+  tufte::tufte_book:
+    citation_package: natbib
+    latex_engine: xelatex
+# bibliography: skeleton.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+library(tufte)
+# invalidate cache when the tufte version changes
+knitr::opts_chunk$set(tidy = FALSE, cache.extra = packageVersion('tufte'))
+options(htmltools.dir.version = FALSE)
+```
+
+# Revisão
+
+## Cadeia de Markov
+
+Uma cadeia de Markov é um processo estocástico em tempo discreto $\{X_n\}_{n\in\mathbb{N}}$ que toma valores em um espaço de estados $S = \{1, \ldots, m\}$ e satisfaz a __propriedade markoviana__^[A intepretação que obtemos ao assumirmos que um certo processo estocástico obedece a propriedade markoviana é que "o futuro depende do passado apenas através do presente".]
+
+\begin{align}
+\Pr(X_{n+1} = j | X_n = i, X_{n-1} = i_{n-1}, \ldots, X_0 = i_0) &=  \Pr(X_{n+1} = j | X_n = i)\nonumber\\
+&= p_{ij},\nonumber
+\end{align}
+
+\noindent para todo tempo $n$, todos os estados $i,j \in S$, e todas as sequências possíveis $i_0,\ldots, i_{n-1}$ de estados anteriores^[$p_{ij}$ são conhecidas como as __probabilidades de transição em um passo__.].
+
+A __matriz de probabilidades de transição__ tem como entradas as probabilidades de transição $p_{ij}$:
+
+```{r, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE}
+library(mat2tex)
+
+# matriz de probabilidades de transição
+# da cadeia de Markov da Mosca e as Aranhas
+# com 4 estados
+
+pt.mosca <- matrix(c(1, 0, 0, 0,
+                     0.3, 0.4, 0.3, 0,
+                     0, 0.3, 0.4, 0.3,
+                     0, 0, 0, 1),
+                   nrow = 4,
+                   ncol = 4,
+                   byrow = TRUE)
+```
+
+```{r, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE, results='asis'}
+"$$ P = " %_% xm(pt.mosca, 1) %_% "$$"
+```
+
+Uma matriz em que os elementos de cada linha (para todas as linhas) somam 1 é uma __matriz estocástica__ (linha-estocástica) e define uma Cadeia de Markov.
+
+Toda matriz de probabilidades de transição pode ser representada por um __diagrama de transição__^[[Toda matriz corresponde a um grafo](https://www.math3ma.com/blog/matrices-probability-graphs?utm_medium=email&utm_source=topic+optin&utm_campaign=awareness&utm_content=20190320+data+nl&mkt_tok=eyJpIjoiWXpjMU5qRmlOV0ZsWmpGaiIsInQiOiJvZ2VkUVROVWcrbnVMVTZtRkg5ekhcL0dralBCc1BPVlhmVkw5eitqWGtMY2lwSGtaSW0yckhSTjJ6aDQxQzltanpEOGp1VGNKbTgyYmFGSytoNm9yWHRNc2xWZjAxZjZqbVRwVGt4ck5IQVJZVVRsMWt0VWFWOVwvOVd6Nk1xTFlvIn0%3D).].
+
+```{r dma, echo=FALSE, fig.cap = "Diagrama de transição da Cadeia de Markov do exemplo da Mosca e Aranhas.", fig.align='center', fig.pos="!ht", fig.height=3, fig.width=5.5, fig.lp="fig:", cache=TRUE, message=FALSE, warning=FALSE}
+library(markovchain)
+library(diagram)
+
+dtcm.mosca <- new("markovchain",
+                  transitionMatrix = pt.mosca,
+                  states = as.character(1:4),
+                  name = "P")
+
+stateNames <- as.character(1:4)
+row.names(pt.mosca) <- stateNames;
+colnames(pt.mosca) <- stateNames
+
+par(mar = c(0, 0, 0, 0))
+plotmat(A = pt.mosca, pos = 4, curve = 0.7, lwd = 2,
+        arr.len = 0.6, arr.width = 0.25, #my = -0.2,
+        box.size = 0.05, arr.type = "triangle", dtext = 0.95,
+        box.col = "#B2B2FF", box.lcol = "black", lcol = "#737373",
+        arr.col = "#737373")
+```
+
+O evento $2\longrightarrow 2\longrightarrow 3\longrightarrow 2\longrightarrow 1$ é um __caminho__ no diagrama da Figura \ref{fig:dma}. A __probabilidade__ deste __caminho__  é dado por
+
+$$
+(0.4) \times (0.3) \times (0.3) \times (0.3),
+$$
+\noindent que nada mais é do que a multiplicação das probailidades de transição anotadas nos arcos (setas ou arestas) do diagrama correspondentes ao caminho  $2\longrightarrow 2\longrightarrow 3\longrightarrow 2\longrightarrow 1$.
+
+A probabilidade de um caminho qualquer é dados por
+
+\begin{equation}
+\label{eq:prob-caminho}
+\Pr(X_0 = i_0, X_1 = i_1, \ldots, X_n = i_n) = \Pr(X_0 = i_0) p_{i_0i_1}p_{i_1i_2} \cdots p_{i_{n-1}i_n}.
+\end{equation}
+
+\noindent Esta é uma consequência direta da propriedade markoviana em conjunto com a regra da multiplicação.
+
+## Simulando uma Cadeia de Markov
+
+Uma forma de utilzarmos o resultado \eqref{eq:prob-caminho} é simulando uma cadeia de Markov:
+
+1. Gere o estado inicial $i_0$ da distribuição inicial $X_0\sim P_{X_0}$.
+2. Para $n = 0, 1, \ldots, M$, gere $X_{n+1}$ das probabilidades de transição $X_{n+1}| X_{n} = i\sim p_{ij} = \Pr(X_{n+1} = j| X_{n} = i)$.
+
+No `R`, podemos criar uma função para a geração de um caminho finito de uma cadeia de Markov. A função `Sim_CM_MA` simula caminhos para a cadeia de Markov do exemplo da Mosca e das Aranhas.
+
+```{r echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+Sim_CM_MA <- function(x0 = 3, probt = c(0.3, 0.4, 0.3)) {
+  x <- x0
+  n <- 0
+  xj <- sample(x = c(2, 3, 4),
+               size = 1, prob = probt)
+  x <- c(x, xj)
+  n <- n + 1
+  repeat{
+    xj <- sample(x = c(xj - 1, xj, xj + 1),
+                 size = 1, prob = probt)
+    x <- c(x, xj)
+    n <- n + 1
+    if (x[n - 1] == 1 | x[n - 1] == 4) break
+  }
+  return(list(n = n - 1, x = x[1:(n - 1)]))
+}
+```
+
+```{r fig.margin=TRUE, fig.cap="Um caminho simulado da Cadeia de Markov da Mosca e das Aranhas.", fig.width=3.5, fig.height=3.5, echo=FALSE, message=FALSE, warning=FALSE}
+
+set.seed(530859)
+x.list <- Sim_CM_MA()
+plot(0:(x.list$n - 1),
+  x.list$x,
+  type = "b",
+  pch = 16,
+  xlab = expression(n),
+  ylab = expression(X[n]),
+  col = "steelblue",
+  axes = FALSE
+)
+points((x.list$n - 1),
+  x.list$x[x.list$n],
+  pch = 16,
+  col = "red"
+)
+axis(1, at = 0:(x.list$n - 1))
+axis(2, at = x.list$x, las = 2)
+```
+
+# Probabilidades de transição em n-passos
+
+Uma vez que definimos as probabilidades de transição em um passo $p_{ij} = \Pr(X_{n+1} = j| X_n = i)$, gostaríamos de calcular a probabilidade de ir de um estado $i$ para um estado $j$ em $n > 1$ passo
+
+$$
+p_{ij}^n = \Pr(X_n = j|X_0 = i).
+$$
+
+__Exemplo (cadeia do clima)__: $X_n$ é o clima no dia $n$ em Porto Alegre, RS. $s = \{1, 2, 3\}$ em que:
+
+* 1: _ensolarado_;
+* 2: _nublado_;
+* 3: _chuvoso_.
+
+A cadeia de Markov do clima fica definida pelo seguinte diagrama de transição
+
+```{r dc, echo=FALSE, fig.cap = "Diagrama de transição da Cadeia de Markov do clima.", fig.align='center', fig.pos="!ht", fig.height=3, fig.width=5.5, fig.lp="fig:", cache=TRUE, message=FALSE, warning=FALSE}
+
+pt.clima <- matrix(c(0.4, 0.6, 0,
+                     0.2, 0.5, 0.3,
+                     0.1, 0.7, 0.2),
+                   nrow = 3,
+                   ncol = 3,
+                   byrow = TRUE)
+
+dtcm.clima <- new("markovchain",
+                  transitionMatrix = pt.clima,
+                  states = as.character(1:3),
+                  name = "P")
+
+stateNames <- c("Sol", "Nuvem", "Chuva")
+row.names(pt.clima) <- stateNames
+colnames(pt.clima) <- stateNames
+
+par(mar = c(0,0,0,0))
+plotmat(A = pt.clima, pos = c(1,2), lwd = 2, curve = 0.15,
+        arr.len = 0.6, arr.width = 0.25, #my = -0.2,
+        box.size = 0.05, arr.type = "triangle", dtext = 0.95,
+        box.col = c("lightsalmon", "#B2B2FF", "#759C75"), box.lcol = "black", lcol = "#737373",
+        arr.col = "#737373")
+```
+
+
+<!-- # Introduction -->
+
+<!-- The Tufte handout style is a style that Edward Tufte uses in his books and handouts. Tufte's style is known for its extensive use of sidenotes, tight integration of graphics with text, and well-set typography. This style has been implemented in LaTeX and HTML/CSS^[See Github repositories [tufte-latex](https://github.com/tufte-latex/tufte-latex) and [tufte-css](https://github.com/edwardtufte/tufte-css)], respectively. We have ported both implementations into the [**tufte** package](https://github.com/rstudio/tufte). If you want LaTeX/PDF output, you may use the `tufte_handout` format for handouts, and `tufte_book` for books. For HTML output, use `tufte_html`. These formats can be either specified in the YAML metadata at the beginning of an R Markdown document (see an example below), or passed to the `rmarkdown::render()` function. See @R-rmarkdown for more information about **rmarkdown**. -->
+
+<!-- ```yaml -->
+<!-- --- -->
+<!-- title: "An Example Using the Tufte Style" -->
+<!-- author: "John Smith" -->
+<!-- output: -->
+<!--   tufte::tufte_handout: default -->
+<!--   tufte::tufte_html: default -->
+<!-- --- -->
+<!-- ``` -->
+
+<!-- There are two goals of this package: -->
+
+<!-- 1. To produce both PDF and HTML output with similar styles from the same R Markdown document; -->
+<!-- 1. To provide simple syntax to write elements of the Tufte style such as side notes and margin figures, e.g. when you want a margin figure, all you need to do is the chunk option `fig.margin = TRUE`, and we will take care of the details for you, so you never need to think about `\begin{marginfigure} \end{marginfigure}` or `<span class="marginfigure"> </span>`; the LaTeX and HTML code under the hood may be complicated, but you never need to learn or write such code. -->
+
+<!-- If you have any feature requests or find bugs in **tufte**, please do not hesitate to file them to https://github.com/rstudio/tufte/issues. For general questions, you may ask them on StackOverflow: http://stackoverflow.com/tags/rmarkdown. -->
+
+<!-- # Headings -->
+
+<!-- This style provides first and second-level headings (that is, `#` and `##`), demonstrated in the next section. You may get unexpected output if you try to use `###` and smaller headings. -->
+
+<!-- `r newthought('In his later books')`^[[Beautiful Evidence](http://www.edwardtufte.com/tufte/books_be)], Tufte starts each section with a bit of vertical space, a non-indented paragraph, and sets the first few words of the sentence in small caps. To accomplish this using this style, call the `newthought()` function in **tufte** in an _inline R expression_ `` `r ` `` as demonstrated at the beginning of this paragraph.^[Note you should not assume **tufte** has been attached to your R session. You should either `library(tufte)` in your R Markdown document before you call `newthought()`, or use `tufte::newthought()`.] -->
+
+<!-- # Figures -->
+
+<!-- ## Margin Figures -->
+
+<!-- Images and graphics play an integral role in Tufte's work. To place figures in the margin you can use the **knitr** chunk option `fig.margin = TRUE`. For example: -->
+
+<!-- ```{r fig-margin, fig.margin = TRUE, fig.cap = "MPG vs horsepower, colored by transmission.", fig.width=3.5, fig.height=3.5, cache=TRUE, message=FALSE} -->
+<!-- library(ggplot2) -->
+<!-- mtcars2 <- mtcars -->
+<!-- mtcars2$am <- factor( -->
+<!--   mtcars$am, labels = c('automatic', 'manual') -->
+<!-- ) -->
+<!-- ggplot(mtcars2, aes(hp, mpg, color = am)) + -->
+<!--   geom_point() + geom_smooth() + -->
+<!--   theme(legend.position = 'bottom') -->
+<!-- ``` -->
+
+<!-- Note the use of the `fig.cap` chunk option to provide a figure caption. You can adjust the proportions of figures using the `fig.width` and `fig.height` chunk options. These are specified in inches, and will be automatically scaled down to fit within the handout margin. -->
+
+<!-- ## Arbitrary Margin Content -->
+
+<!-- In fact, you can include anything in the margin using the **knitr** engine named `marginfigure`. Unlike R code chunks ```` ```{r} ````, you write a chunk starting with ```` ```{marginfigure} ```` instead, then put the content in the chunk. See an example on the right about the first fundamental theorem of calculus. -->
+
+<!-- ```{marginfigure} -->
+<!-- We know from _the first fundamental theorem of calculus_ that for $x$ in $[a, b]$: -->
+<!-- $$\frac{d}{dx}\left( \int_{a}^{x} f(u)\,du\right)=f(x).$$ -->
+<!-- ``` -->
+
+<!-- For the sake of portability between LaTeX and HTML, you should keep the margin content as simple as possible (syntax-wise) in the `marginefigure` blocks. You may use simple Markdown syntax like `**bold**` and `_italic_` text, but please refrain from using footnotes, citations, or block-level elements (e.g. blockquotes and lists) there. -->
+
+<!-- Note: if you set `echo = FALSE` in your global chunk options, you will have to add `echo = TRUE` to the chunk to display a margin figure, for example ```` ```{marginfigure, echo = TRUE} ````. -->
+
+<!-- ## Full Width Figures -->
+
+<!-- You can arrange for figures to span across the entire page by using the chunk option `fig.fullwidth = TRUE`. -->
+
+<!-- ```{r fig-fullwidth, fig.width = 10, fig.height = 2, fig.fullwidth = TRUE, fig.cap = "A full width figure.", warning=FALSE, message=FALSE, cache=TRUE} -->
+<!-- ggplot(diamonds, aes(carat, price)) + geom_smooth() + -->
+<!--   facet_grid(~ cut) -->
+<!-- ``` -->
+
+<!--  Other chunk options related to figures can still be used, such as `fig.width`, `fig.cap`, `out.width`, and so on. For full width figures, usually `fig.width` is large and `fig.height` is small. In the above example, the plot size is $10 \times 2$. -->
+
+<!-- ## Main Column Figures -->
+
+<!-- Besides margin and full width figures, you can of course also include figures constrained to the main column. This is the default type of figures in the LaTeX/HTML output. -->
+
+<!-- ```{r fig-main, fig.cap = "A figure in the main column.", cache=TRUE} -->
+<!-- ggplot(diamonds, aes(cut, price)) + geom_boxplot() -->
+<!-- ``` -->
+
+<!-- # Sidenotes -->
+
+<!-- One of the most prominent and distinctive features of this style is the extensive use of sidenotes. There is a wide margin to provide ample room for sidenotes and small figures. Any use of a footnote will automatically be converted to a sidenote. ^[This is a sidenote that was entered using a footnote.]  -->
+
+<!-- If you'd like to place ancillary information in the margin without the sidenote mark (the superscript number), you can use the `margin_note()` function from **tufte** in an inline R expression. `r margin_note("This is a margin note.  Notice that there is no number preceding the note.")` This function does not process the text with Pandoc, so Markdown syntax will not work here. If you need to write anything in Markdown syntax, please use the `marginfigure` block described previously. -->
+
+<!-- # References -->
+
+<!-- References can be displayed as margin notes for HTML output. For example, we can cite R here [@R-base]. To enable this feature, you must set `link-citations: yes` in the YAML metadata, and the version of `pandoc-citeproc` should be at least 0.7.2. You can always install your own version of Pandoc from http://pandoc.org/installing.html if the version is not sufficient. To check the version of `pandoc-citeproc` in your system, you may run this in R: -->
+
+<!-- ```{r eval=FALSE} -->
+<!-- system2('pandoc-citeproc', '--version') -->
+<!-- ``` -->
+
+<!-- If your version of `pandoc-citeproc` is too low, or you did not set `link-citations: yes` in YAML, references in the HTML output will be placed at the end of the output document. -->
+
+<!-- # Tables -->
+
+<!-- You can use the `kable()` function from the **knitr** package to format tables that integrate well with the rest of the Tufte handout style. The table captions are placed in the margin like figures in the HTML output. -->
+
+<!-- ```{r} -->
+<!-- knitr::kable( -->
+<!--   mtcars[1:6, 1:6], caption = 'A subset of mtcars.' -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- # Block Quotes -->
+
+<!-- We know from the Markdown syntax that paragraphs that start with `>` are converted to block quotes. If you want to add a right-aligned footer for the quote, you may use the function `quote_footer()` from **tufte** in an inline R expression. Here is an example: -->
+
+<!-- > "If it weren't for my lawyer, I'd still be in prison. It went a lot faster with two people digging." -->
+<!-- > -->
+<!-- > `r tufte::quote_footer('--- Joe Martin')` -->
+
+<!-- Without using `quote_footer()`, it looks like this (the second line is just a normal paragraph): -->
+
+<!-- > "Great people talk about ideas, average people talk about things, and small people talk about wine." -->
+<!-- > -->
+<!-- > --- Fran Lebowitz -->
+
+<!-- # Responsiveness -->
+
+<!-- The HTML page is responsive in the sense that when the page width is smaller than 760px, sidenotes and margin notes will be hidden by default. For sidenotes, you can click their numbers (the superscripts) to toggle their visibility. For margin notes, you may click the circled plus signs to toggle visibility. -->
+
+<!-- # More Examples -->
+
+<!-- The rest of this document consists of a few test cases to make sure everything still works well in slightly more complicated scenarios. First we generate two plots in one figure environment with the chunk option `fig.show = 'hold'`: -->
+
+<!-- ```{r fig-two-together, fig.cap="Two plots in one figure environment.", fig.show='hold', cache=TRUE, message=FALSE} -->
+<!-- p <- ggplot(mtcars2, aes(hp, mpg, color = am)) + -->
+<!--   geom_point() -->
+<!-- p -->
+<!-- p + geom_smooth() -->
+<!-- ``` -->
+
+<!-- Then two plots in separate figure environments (the code is identical to the previous code chunk, but the chunk option is the default `fig.show = 'asis'` now): -->
+
+<!-- ```{r fig-two-separate, ref.label='fig-two-together', fig.cap=sprintf("Two plots in separate figure environments (the %s plot).", c("first", "second")), cache=TRUE, message=FALSE} -->
+<!-- ``` -->
+
+<!-- You may have noticed that the two figures have different captions, and that is because we used a character vector of length 2 for the chunk option `fig.cap` (something like `fig.cap = c('first plot', 'second plot')`). -->
+
+<!-- Next we show multiple plots in margin figures. Similarly, two plots in the same figure environment in the margin: -->
+
+<!-- ```{r fig-margin-together, fig.margin=TRUE, fig.show='hold', fig.cap="Two plots in one figure environment in the margin.", fig.width=3.5, fig.height=2.5, cache=TRUE} -->
+<!-- p -->
+<!-- p + geom_smooth(method = 'lm') -->
+<!-- ``` -->
+
+<!-- Then two plots from the same code chunk placed in different figure environments: -->
+
+<!-- ```{r fig-margin-separate, fig.margin=TRUE, fig.cap=sprintf("Two plots in separate figure environments in the margin (the %s plot).", c("first", "second")), fig.width=3.5, fig.height=2.5, cache=TRUE} -->
+<!-- knitr::kable(head(iris, 15)) -->
+<!-- p -->
+<!-- knitr::kable(head(iris, 12)) -->
+<!-- p + geom_smooth(method = 'lm') -->
+<!-- knitr::kable(head(iris, 5)) -->
+<!-- ``` -->
+
+<!-- We blended some tables in the above code chunk only as _placeholders_ to make sure there is enough vertical space among the margin figures, otherwise they will be stacked tightly together. For a practical document, you should not insert too many margin figures consecutively and make the margin crowded.  -->
+
+<!-- You do not have to assign captions to figures. We show three figures with no captions below in the margin, in the main column, and in full width, respectively. -->
+
+<!-- ```{r fig-nocap-margin, fig.margin=TRUE, fig.width=3.5, fig.height=2, cache=TRUE} -->
+<!-- # a boxplot of weight vs transmission; this figure -->
+<!-- # will be placed in the margin -->
+<!-- ggplot(mtcars2, aes(am, wt)) + geom_boxplot() + -->
+<!--   coord_flip() -->
+<!-- ``` -->
+<!-- ```{r fig-nocap-main, cache=TRUE} -->
+<!-- # a figure in the main column -->
+<!-- p <- ggplot(mtcars, aes(wt, hp)) + geom_point() -->
+<!-- p -->
+<!-- ``` -->
+<!-- ```{r fig-nocap-fullwidth, fig.fullwidth=TRUE, fig.width=10, fig.height=3, cache=TRUE} -->
+<!-- # a fullwidth figure -->
+<!-- p + geom_smooth(method = 'lm') + facet_grid(~ gear) -->
+<!-- ``` -->
+
+<!-- # Some Notes on Tufte CSS -->
+
+<!-- There are a few other things in Tufte CSS that we have not mentioned so far. If you prefer `r sans_serif('sans-serif fonts')`, use the function `sans_serif()` in **tufte**. For epigraphs, you may use a pair of underscores to make the paragraph italic in a block quote, e.g. -->
+
+<!-- > _I can win an argument on any topic, against any opponent. People know this, and steer clear of me at parties. Often, as a sign of their great respect, they don't even invite me._ -->
+<!-- > -->
+<!-- > `r quote_footer('--- Dave Barry')` -->
+
+<!-- We hope you will enjoy the simplicity of R Markdown and this R package, and we sincerely thank the authors of the Tufte-CSS and Tufte-LaTeX projects for developing the beautiful CSS and LaTeX classes. Our **tufte** package would not have been possible without their heavy lifting. -->
+
+<!-- You can turn on/off some features of the Tufte style in HTML output. The default features enabled are: -->
+
+<!-- ```yaml -->
+<!-- output: -->
+<!--   tufte::tufte_html: -->
+<!--     tufte_features: ["fonts", "background", "italics"] -->
+<!-- ``` -->
+
+<!-- If you do not want the page background to be lightyellow, you can remove `background` from `tufte_features`. You can also customize the style of the HTML page via a CSS file. For example, if you do not want the subtitle to be italic, you can define -->
+
+<!-- ```css -->
+<!-- h3.subtitle em { -->
+<!--   font-style: normal; -->
+<!-- } -->
+<!-- ``` -->
+
+<!-- in, say, a CSS file `my_style.css` (under the same directory of your Rmd document), and apply it to your HTML output via the `css` option, e.g., -->
+
+<!-- ```yaml -->
+<!-- output: -->
+<!--   tufte::tufte_html: -->
+<!--     tufte_features: ["fonts", "background"] -->
+<!--     css: "my_style.css" -->
+<!-- ``` -->
+
+<!-- There is also a variant of the Tufte style in HTML/CSS named "[Envisoned CSS](http://nogginfuel.com/envisioned-css/)". This style can be used by specifying the argument `tufte_variant = 'envisioned'` in `tufte_html()`^[The actual Envisioned CSS was not used in the **tufte** package. We only changed the fonts, background color, and text color based on the default Tufte style.], e.g. -->
+
+<!-- ```yaml -->
+<!-- output: -->
+<!--   tufte::tufte_html: -->
+<!--     tufte_variant: "envisioned" -->
+<!-- ``` -->
+
+<!-- To see the R Markdown source of this example document, you may follow [this link to Github](https://github.com/rstudio/tufte/raw/master/inst/rmarkdown/templates/tufte_html/skeleton/skeleton.Rmd), use the wizard in RStudio IDE (`File -> New File -> R Markdown -> From Template`), or open the Rmd file in the package: -->
+
+<!-- ```{r eval=FALSE} -->
+<!-- file.edit( -->
+<!--   tufte:::template_resources( -->
+<!--     'tufte_html', '..', 'skeleton', 'skeleton.Rmd' -->
+<!--   ) -->
+<!-- ) -->
+<!-- ``` -->
+
+<!-- This document is also available in [Chinese](http://rstudio.github.io/tufte/cn/), and its `envisioned` style can be found [here](http://rstudio.github.io/tufte/envisioned/). -->
+
+<!-- ```{r bib, include=FALSE} -->
+<!-- # create a bib file for the R packages used in this document -->
+<!-- knitr::write_bib(c('base', 'rmarkdown'), file = 'skeleton.bib') -->
+<!-- ``` -->
